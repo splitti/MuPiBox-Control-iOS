@@ -20,37 +20,77 @@ final class AppModel {
     private let api = MuPiBoxAPIClient()
     private let defaultsKey = "mupibox.control.boxes.v1"
     private let selectionKey = "mupibox.control.selectedBox.v1"
-    private var refreshTask: Task<Void, Never>?
+    private var fastRefreshTask: Task<Void, Never>?
+    private var slowRefreshTask: Task<Void, Never>?
 
     var selectedBox: BoxEndpoint? {
         guard let selectedBoxID else { return boxes.first }
         return boxes.first(where: { $0.id == selectedBoxID }) ?? boxes.first
     }
 
+    /// Matches the Android control screen: local/Spotify playback state is derived with the
+    /// same rule on both platforms instead of each app guessing independently.
+    var activeSource: PlaybackSource {
+        PlaybackSourceSelector.active(player: player, spotify: spotify)
+    }
+
     func start() async {
         loadBoxes()
         await refresh()
-        refreshTask?.cancel()
-        refreshTask = Task { [weak self] in
+        startPolling()
+    }
+
+    func startPolling() {
+        stopPolling()
+        // Player/Spotify state refreshes at the same ~1 s cadence as the Android control
+        // screen; system status (battery/Wi-Fi/health) stays on the cheaper ~5 s cadence.
+        fastRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+                await self?.refreshPlayback(silent: true)
+            }
+        }
+        slowRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { break }
-                await self?.refresh(silent: true)
+                await self?.refreshSystem(silent: true)
             }
         }
     }
 
+    func stopPolling() {
+        fastRefreshTask?.cancel()
+        fastRefreshTask = nil
+        slowRefreshTask?.cancel()
+        slowRefreshTask = nil
+    }
+
     func addBox(name: String, host: String, port: Int) async {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanHost.isEmpty, (1...65535).contains(port) else {
-            errorMessage = "Bitte Host/IP und einen gültigen Port angeben."
+        let candidate = BoxEndpoint(name: cleanName.isEmpty ? host : cleanName, host: host, port: port)
+        let normalized: BoxEndpoint
+        do {
+            normalized = try LocalEndpointValidator.validate(candidate)
+        } catch {
+            errorMessage = error.localizedDescription
             return
         }
-        let box = BoxEndpoint(name: cleanName.isEmpty ? cleanHost : cleanName, host: cleanHost, port: port)
-        boxes.append(box)
-        selectedBoxID = box.id
+        do {
+            let probeHealth = try await api.health(normalized)
+            guard probeHealth.status == "ok" else {
+                errorMessage = "Host antwortet, ist aber keine erreichbare MuPiBox."
+                return
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        boxes.append(normalized)
+        selectedBoxID = normalized.id
         saveBoxes()
+        errorMessage = nil
         await refresh()
     }
 
@@ -68,25 +108,41 @@ final class AppModel {
     }
 
     func refresh(silent: Bool = false) async {
-        guard let box = selectedBox else {
+        guard selectedBox != nil else {
             health = nil; player = nil; system = nil; spotify = nil
             return
         }
         if !silent { isRefreshing = true }
         defer { if !silent { isRefreshing = false } }
+        async let playbackRefresh: Void = refreshPlayback(silent: true)
+        async let systemRefresh: Void = refreshSystem(silent: true)
+        _ = await (playbackRefresh, systemRefresh)
+    }
+
+    private func refreshPlayback(silent: Bool) async {
+        guard let box = selectedBox else { return }
         do {
-            async let healthRequest = api.health(box)
             async let playerRequest = api.playerStatus(box)
-            async let systemRequest = api.systemStatus(box)
             async let spotifyRequest = api.spotifyStatus(box)
-            let values = try await (healthRequest, playerRequest, systemRequest, spotifyRequest)
-            health = values.0
-            player = values.1
-            system = values.2
-            spotify = values.3
+            let (playerValue, spotifyValue) = try await (playerRequest, spotifyRequest)
+            player = playerValue
+            spotify = spotifyValue
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            if !silent { errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func refreshSystem(silent: Bool) async {
+        guard let box = selectedBox else { return }
+        do {
+            async let healthRequest = api.health(box)
+            async let systemRequest = api.systemStatus(box)
+            let (healthValue, systemValue) = try await (healthRequest, systemRequest)
+            health = healthValue
+            system = systemValue
+        } catch {
+            if !silent { errorMessage = error.localizedDescription }
         }
     }
 

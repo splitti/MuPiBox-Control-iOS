@@ -95,7 +95,7 @@ struct DashboardView: View {
             Text("Aktuelle Wiedergabe")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            if let spotify = model.spotify, spotify.connected, let track = spotify.track {
+            if isSpotifyActive, let spotify = model.spotify, let track = spotify.track {
                 Text(track.name).font(.title3.weight(.semibold))
                 Text(track.artists.joined(separator: ", "))
                     .foregroundStyle(.secondary)
@@ -206,8 +206,7 @@ struct DashboardView: View {
     }
 
     private var isSpotifyActive: Bool {
-        guard let spotify = model.spotify else { return false }
-        return spotify.connected && (spotify.playing || spotify.paused || spotify.track != nil)
+        model.activeSource == .spotify
     }
 
     private var isPlaying: Bool {

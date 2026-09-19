@@ -31,7 +31,13 @@ This layer is tested with `swift test` in Linux and can also be imported by the 
 - command orchestration,
 - user-facing errors/loading state.
 
-M1 refresh cadence is about five seconds for cheap read-only status calls. Bluetooth is excluded because its endpoint triggers a scan.
+M1 refresh cadence matches the Android control screen: player/Spotify state refreshes at ~1 s
+while the dashboard is active, system/battery/Wi-Fi/health status at ~5 s. Bluetooth is excluded
+because its endpoint triggers a scan.
+
+Local/Spotify source arbitration and LAN-only endpoint validation live in `MuPiBoxCore`
+(`PlaybackSourceSelector`, `LocalEndpointValidator`) so the same rule is Linux-testable and shared
+by every view, mirroring the Android `PlaybackSourceSelector`/`LocalEndpointValidator`.
 
 ### SwiftUI views
 
@@ -48,6 +54,8 @@ M1 uses `UserDefaults` for the small non-secret device list/selection. If later 
 ## Networking
 
 M1 targets MuPiBox on the local LAN, normally plain HTTP. The app's Info.plist allows local networking without globally disabling App Transport Security. Local Network privacy and Bonjour service declarations are included.
+
+Every manually entered box passes `LocalEndpointValidator` (RFC1918 IPv4, IPv6 ULA/link-local/loopback, `.local`/`.home.arpa`, single-label LAN hostnames) and a `/api/health` probe before it is saved, matching the Android `LocalEndpointValidator`/`BoxRepository.add` guard. A box is never saved from an unreachable or non-LAN host.
 
 ## Future configuration architecture
 
