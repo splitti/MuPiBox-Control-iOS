@@ -16,6 +16,15 @@ import Testing
     #expect(value.battery.charging == true)
 }
 
+@Test func decodesUnavailableBattery() throws {
+    // A box without a MuPiHat must decode cleanly to "unavailable", not an error or a fake 0%.
+    let data = Data(#"{"online":true,"wifi":{"connected":false},"battery":{"available":false}}"#.utf8)
+    let value = try JSONDecoder().decode(SystemStatus.self, from: data)
+    #expect(value.battery.available == false)
+    #expect(value.battery.percent == nil)
+    #expect(value.battery.charging == nil)
+}
+
 @Test func decodesSpotifyStatus() throws {
     let data = Data(#"{"connected":true,"playing":true,"paused":false,"buffering":false,"volume":32000,"volume_steps":65535,"track":{"name":"Test","artists":["Artist"],"album":"Album","position_ms":1200,"duration_ms":180000}}"#.utf8)
     let value = try JSONDecoder().decode(SpotifyStatus.self, from: data)
@@ -159,4 +168,32 @@ private func spotify(playing: Bool, paused: Bool, hasTrack: Bool) throws -> Spot
 
 @Test func rawVolumeFromPercentClampsToMax() throws {
     #expect(VolumeScaling.raw(percent: 150, max: 50) == 50)
+}
+
+// MARK: - BluetoothErrorPresentation
+//
+// This is the one piece of AppModel.scanBluetooth()'s error handling that's pure enough to live
+// in Core and be verified by `swift test` - the surrounding async/@MainActor orchestration
+// (isScanningBluetooth toggling, actually calling the API) is App-target only and needs Xcode.
+
+@Test func bluetoothErrorMapsUnauthorizedToReadableMessage() throws {
+    let message = BluetoothErrorPresentation.message(for: MuPiBoxAPIError.httpStatus(401, nil))
+    #expect(message == "Anmeldung erforderlich.")
+}
+
+@Test func bluetoothErrorMapsDisabledToReadableMessage() throws {
+    let message = BluetoothErrorPresentation.message(for: MuPiBoxAPIError.httpStatus(409, nil))
+    #expect(message == "Bluetooth ist deaktiviert.")
+}
+
+@Test func bluetoothErrorFallsBackToLocalizedDescriptionForOtherCodes() throws {
+    let error = MuPiBoxAPIError.httpStatus(503, "boxed down")
+    #expect(BluetoothErrorPresentation.message(for: error) == error.localizedDescription)
+}
+
+@Test func bluetoothErrorFallsBackForNonApiErrors() throws {
+    struct OtherError: Error, LocalizedError {
+        var errorDescription: String? { "Custom failure" }
+    }
+    #expect(BluetoothErrorPresentation.message(for: OtherError()) == "Custom failure")
 }

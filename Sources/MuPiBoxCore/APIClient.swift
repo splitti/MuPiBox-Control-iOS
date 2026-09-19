@@ -3,6 +3,25 @@ import Foundation
 import FoundationNetworking
 #endif
 
+/// Maps the two documented Bluetooth failure codes (`docs/mupibox-api-current.md`) to a readable
+/// message instead of a raw "HTTP 401"/"HTTP 409", mirroring Android's
+/// `BoxControlViewModel.refreshBluetooth()`. Pure and Core-testable by design: the actual
+/// `errorMessage` assignment happens in the App target's `AppModel.scanBluetooth()`, which can't
+/// be unit-tested here (no Linux target for `Sources/App`), but this mapping is the part that
+/// actually decides *what the user sees*, and that part is verified by `swift test`.
+public enum BluetoothErrorPresentation {
+    public static func message(for error: Error) -> String {
+        if let apiError = error as? MuPiBoxAPIError, case let .httpStatus(code, _) = apiError {
+            switch code {
+            case 401: return "Anmeldung erforderlich."
+            case 409: return "Bluetooth ist deaktiviert."
+            default: break
+            }
+        }
+        return error.localizedDescription
+    }
+}
+
 public enum MuPiBoxAPIError: Error, Equatable, LocalizedError, Sendable {
     case invalidBaseURL
     case invalidResponse

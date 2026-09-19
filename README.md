@@ -116,3 +116,4 @@ Useful docs:
 - [`docs/roadmap.md`](docs/roadmap.md)
 - [`docs/ios-build.md`](docs/ios-build.md)
 - [`docs/app-icon.md`](docs/app-icon.md)
+- [`docs/xcode-verification.md`](docs/xcode-verification.md)

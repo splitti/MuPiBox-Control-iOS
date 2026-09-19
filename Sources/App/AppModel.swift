@@ -238,7 +238,7 @@ final class AppModel {
             errorMessage = nil
         } catch {
             bluetoothDevices = []
-            errorMessage = error.localizedDescription
+            errorMessage = BluetoothErrorPresentation.message(for: error)
         }
     }
 
