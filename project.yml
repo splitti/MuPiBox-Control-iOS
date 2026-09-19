@@ -1,0 +1,28 @@
+name: MuPiBoxControl
+options:
+  bundleIdPrefix: de.mupibox
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  MuPiBoxCore:
+    path: .
+targets:
+  MuPiBoxControl:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/App
+    dependencies:
+      - package: MuPiBoxCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.mupibox.control.ios
+        PRODUCT_NAME: MuPiBox Control
+        SWIFT_VERSION: "6.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        INFOPLIST_FILE: Sources/App/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+    scheme:
+      testTargets: []
