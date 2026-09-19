@@ -34,6 +34,28 @@ final class AppModel {
         PlaybackSourceSelector.active(player: player, spotify: spotify)
     }
 
+    /// Volume normalized to 0–100 %, matching the Android control screen. Never expose the raw
+    /// local `max_volume` or Spotify `volume_steps` range in the UI.
+    var volumePercent: Int {
+        switch activeSource {
+        case .spotify:
+            return VolumeScaling.percent(raw: spotify?.volume ?? 0, max: spotify?.volumeSteps ?? 0)
+        case .local:
+            return VolumeScaling.percent(raw: player?.volume ?? 0, max: player?.maxVolume ?? 0)
+        }
+    }
+
+    func setVolumePercent(_ percent: Int) async {
+        switch activeSource {
+        case .spotify:
+            let raw = VolumeScaling.raw(percent: percent, max: spotify?.volumeSteps ?? 0)
+            await spotifyCommand("volume", value: Int64(raw))
+        case .local:
+            let raw = VolumeScaling.raw(percent: percent, max: player?.maxVolume ?? 0)
+            await localCommand("volume", value: Double(raw))
+        }
+    }
+
     func start() async {
         loadBoxes()
         await refresh()

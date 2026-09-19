@@ -4,6 +4,7 @@ import MuPiBoxCore
 struct DashboardView: View {
     @Bindable var model: AppModel
     @State private var showingAddBox = false
+    @State private var showingBoxes = false
     @State private var showingBluetooth = false
     @State private var ttsText = ""
 
@@ -35,24 +36,15 @@ struct DashboardView: View {
             .navigationTitle("MuPiBox Control")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        ForEach(model.boxes) { box in
-                            Button {
-                                Task { await model.select(box) }
-                            } label: {
-                                if box.id == model.selectedBox?.id {
-                                    Label(box.name, systemImage: "checkmark")
-                                } else {
-                                    Text(box.name)
-                                }
-                            }
-                        }
-                        Divider()
-                        Button("MuPiBox hinzufügen", systemImage: "plus") { showingAddBox = true }
+                    Button {
+                        showingBoxes = true
                     } label: {
                         Label(model.selectedBox?.name ?? "Box", systemImage: "hifispeaker")
                     }
                 }
+            }
+            .sheet(isPresented: $showingBoxes) {
+                BoxesView(model: model)
             }
             .sheet(isPresented: $showingAddBox) {
                 AddBoxView(model: model)
@@ -106,7 +98,7 @@ struct DashboardView: View {
                     .font(.title3.weight(.semibold))
                 Text(model.player?.folder ?? "Lokale Medien")
                     .foregroundStyle(.secondary)
-                Label("Lokal", systemImage: "internaldrive")
+                Label("Lokale Wiedergabe", systemImage: "internaldrive")
                     .font(.caption)
             } else {
                 Text("Keine Wiedergabe")
@@ -139,9 +131,12 @@ struct DashboardView: View {
 
             HStack {
                 Image(systemName: "speaker.fill")
-                Slider(value: volumeBinding, in: 0...Double(maxVolume), step: 1)
+                Slider(value: volumePercentBinding, in: 0...100, step: 1)
                 Image(systemName: "speaker.wave.3.fill")
             }
+            Text("Lautstärke \(model.volumePercent) %")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .cardStyle()
     }
@@ -170,7 +165,7 @@ struct DashboardView: View {
 
     private var ttsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Sprechen")
+            Text("Text an die Box")
                 .font(.headline)
             TextField("Text, den die MuPiBox sprechen soll", text: $ttsText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
@@ -185,7 +180,7 @@ struct DashboardView: View {
                 if model.isSpeaking {
                     ProgressView().frame(maxWidth: .infinity)
                 } else {
-                    Label("Auf MuPiBox sprechen", systemImage: "waveform")
+                    Label("Vorlesen", systemImage: "waveform")
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -213,22 +208,11 @@ struct DashboardView: View {
         isSpotifyActive ? (model.spotify?.playing == true) : (model.player?.state == "playing")
     }
 
-    private var maxVolume: Int {
-        if isSpotifyActive { return max(model.spotify?.volumeSteps ?? 100, 1) }
-        return max(model.player?.maxVolume ?? 100, 1)
-    }
-
-    private var volumeBinding: Binding<Double> {
+    private var volumePercentBinding: Binding<Double> {
         Binding(
-            get: { Double(isSpotifyActive ? (model.spotify?.volume ?? 0) : (model.player?.volume ?? 0)) },
+            get: { Double(model.volumePercent) },
             set: { newValue in
-                Task {
-                    if isSpotifyActive {
-                        await model.spotifyCommand("volume", value: Int64(newValue))
-                    } else {
-                        await model.localCommand("volume", value: newValue)
-                    }
-                }
+                Task { await model.setVolumePercent(Int(newValue.rounded())) }
             }
         )
     }

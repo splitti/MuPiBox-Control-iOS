@@ -113,3 +113,29 @@ private func spotify(playing: Bool, paused: Bool, hasTrack: Bool) throws -> Spot
     let source = PlaybackSourceSelector.active(player: nil, spotify: nil)
     #expect(source == .local)
 }
+
+// MARK: - VolumeScaling
+
+@Test func volumePercentFromLocalMaxVolume() throws {
+    #expect(VolumeScaling.percent(raw: 25, max: 50) == 50)
+}
+
+@Test func volumePercentFromSpotifyVolumeSteps() throws {
+    #expect(VolumeScaling.percent(raw: 32768, max: 65535) == 50)
+}
+
+@Test func volumePercentClampsToHundred() throws {
+    #expect(VolumeScaling.percent(raw: 999, max: 50) == 100)
+}
+
+@Test func volumePercentIsZeroWhenMaxIsZero() throws {
+    #expect(VolumeScaling.percent(raw: 10, max: 0) == 0)
+}
+
+@Test func rawVolumeFromPercentRoundTripsForLocal() throws {
+    #expect(VolumeScaling.raw(percent: 50, max: 50) == 25)
+}
+
+@Test func rawVolumeFromPercentClampsToMax() throws {
+    #expect(VolumeScaling.raw(percent: 150, max: 50) == 50)
+}

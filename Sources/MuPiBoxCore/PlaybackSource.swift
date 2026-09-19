@@ -1,6 +1,6 @@
 import Foundation
 
-public enum PlaybackSource: Sendable {
+public enum PlaybackSource: Equatable, Sendable {
     case local
     case spotify
 }
