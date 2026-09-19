@@ -115,3 +115,4 @@ Useful docs:
 - [`docs/m1-acceptance.md`](docs/m1-acceptance.md)
 - [`docs/roadmap.md`](docs/roadmap.md)
 - [`docs/ios-build.md`](docs/ios-build.md)
+- [`docs/app-icon.md`](docs/app-icon.md)
