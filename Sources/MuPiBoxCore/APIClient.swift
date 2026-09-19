@@ -58,12 +58,24 @@ private struct SpeakRequest: Codable {
 }
 
 public actor MuPiBoxAPIClient {
+    /// Resolves `box.host` to the literal address this client should actually connect to.
+    /// Mirrors Android's `LanOnlyDns`: a saved box's host already passed `LocalEndpointValidator`
+    /// at add time (it *looks* like a LAN target), but that says nothing about what a live DNS
+    /// resolution returns - a resolver should re-validate every resolved address is itself a LAN
+    /// address before connecting, so a compromised/rebinding DNS answer can't redirect a saved
+    /// box to a public host. `MuPiBoxCore` stays Linux-testable and has no OS resolver access, so
+    /// this is injected from the App target (see `LanDNSGuard`); without one, `box.host` is used
+    /// as-is (this is what every unit test does, since none of them touch the real network).
+    public typealias HostResolver = @Sendable (String) async throws -> String
+
     private let session: URLSession
+    private let resolveHost: HostResolver?
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(session: URLSession = .shared) {
+    public init(session: URLSession = .shared, resolveHost: HostResolver? = nil) {
         self.session = session
+        self.resolveHost = resolveHost
     }
 
     public func health(_ box: BoxEndpoint) async throws -> HealthResponse {
@@ -105,7 +117,8 @@ public actor MuPiBoxAPIClient {
     }
 
     public func speak(_ box: BoxEndpoint, text: String) async throws {
-        let body = SpeakRequest(sourceType: "app", sourceRef: "manual", text: text)
+        // Matches Android's MuPiBoxClient.speak(): same source_ref, sibling-specific source_type.
+        let body = SpeakRequest(sourceType: "ios-app", sourceRef: "mupibox-control", text: text)
         let _: EmptySuccess = try await send(box, path: "/api/speak", method: "POST", body: body, timeout: 25)
     }
 
@@ -131,8 +144,18 @@ public actor MuPiBoxAPIClient {
         timeout: TimeInterval
     ) async throws -> Response {
         guard let baseURL = box.baseURL else { throw MuPiBoxAPIError.invalidBaseURL }
+        var connectURL = baseURL
+        if let resolveHost {
+            let resolvedHost = try await resolveHost(box.host)
+            guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+                throw MuPiBoxAPIError.invalidBaseURL
+            }
+            components.host = resolvedHost
+            guard let resolvedURL = components.url else { throw MuPiBoxAPIError.invalidBaseURL }
+            connectURL = resolvedURL
+        }
         let cleanPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        let url = baseURL.appendingPathComponent(cleanPath)
+        let url = connectURL.appendingPathComponent(cleanPath)
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")

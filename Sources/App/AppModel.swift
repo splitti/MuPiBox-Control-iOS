@@ -12,12 +12,16 @@ final class AppModel {
     var system: SystemStatus?
     var spotify: SpotifyStatus?
     var bluetoothDevices: [BluetoothDevice] = []
+    /// Per-box reachability for the box list, keyed by id; nil = not yet checked. Matches
+    /// Android's `BoxesViewModel.refreshOnlineStates` - cheap enough to call every time the list
+    /// is shown, unlike the Bluetooth scan endpoint.
+    var onlineStates: [UUID: Bool] = [:]
     var errorMessage: String?
     var isRefreshing = false
     var isSpeaking = false
     var isScanningBluetooth = false
 
-    private let api = MuPiBoxAPIClient()
+    private let api = MuPiBoxAPIClient(resolveHost: LanDNSGuard.resolve)
     private let defaultsKey = "mupibox.control.boxes.v1"
     private let selectionKey = "mupibox.control.selectedBox.v1"
     private var fastRefreshTask: Task<Void, Never>?
@@ -89,38 +93,67 @@ final class AppModel {
         slowRefreshTask = nil
     }
 
-    func addBox(name: String, host: String, port: Int) async {
-        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidate = BoxEndpoint(name: cleanName.isEmpty ? host : cleanName, host: host, port: port)
+    /// Validates a candidate against `LocalEndpointValidator` and requires a passing
+    /// `/api/health` probe before it may be saved - matches Android's `BoxRepository.add`. Used
+    /// by both `addBox` and `updateBox` so add/edit can never diverge on what counts as valid.
+    private func validatedAndReachable(_ candidate: BoxEndpoint) async -> BoxEndpoint? {
         let normalized: BoxEndpoint
         do {
             normalized = try LocalEndpointValidator.validate(candidate)
         } catch {
             errorMessage = error.localizedDescription
-            return
+            return nil
         }
         do {
             let probeHealth = try await api.health(normalized)
             guard probeHealth.status == "ok" else {
                 errorMessage = "Host antwortet, ist aber keine erreichbare MuPiBox."
-                return
+                return nil
             }
         } catch {
             errorMessage = error.localizedDescription
-            return
+            return nil
         }
+        errorMessage = nil
+        return normalized
+    }
+
+    func addBox(name: String, host: String, port: Int) async {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = BoxEndpoint(name: cleanName.isEmpty ? host : cleanName, host: host, port: port)
+        guard let normalized = await validatedAndReachable(candidate) else { return }
         boxes.append(normalized)
         selectedBoxID = normalized.id
         saveBoxes()
-        errorMessage = nil
+        await refresh()
+    }
+
+    func updateBox(_ original: BoxEndpoint, name: String, host: String, port: Int) async {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = BoxEndpoint(id: original.id, name: cleanName.isEmpty ? host : cleanName, host: host, port: port)
+        guard let normalized = await validatedAndReachable(candidate) else { return }
+        guard let index = boxes.firstIndex(where: { $0.id == original.id }) else { return }
+        boxes[index] = normalized
+        onlineStates[original.id] = nil
+        saveBoxes()
         await refresh()
     }
 
     func removeBox(_ box: BoxEndpoint) async {
         boxes.removeAll { $0.id == box.id }
+        onlineStates[box.id] = nil
         if selectedBoxID == box.id { selectedBoxID = boxes.first?.id }
         saveBoxes()
         await refresh()
+    }
+
+    func refreshOnlineStates() async {
+        for box in boxes {
+            Task {
+                let reachable = (try? await api.health(box))?.status == "ok"
+                onlineStates[box.id] = reachable
+            }
+        }
     }
 
     func select(_ box: BoxEndpoint) async {

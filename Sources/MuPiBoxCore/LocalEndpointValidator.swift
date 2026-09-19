@@ -34,7 +34,10 @@ public enum LocalEndpointValidator {
         return normalized
     }
 
-    static func isLanHost(_ host: String) -> Bool {
+    /// Also used to validate an already-resolved numeric address (see `LanDNSGuard` in the App
+    /// target), not just a user-typed host string - the same "is this a LAN address" rule applies
+    /// to both.
+    public static func isLanHost(_ host: String) -> Bool {
         let h = host.lowercased()
         if h == "localhost" || h.hasSuffix(".local") || h.hasSuffix(".home.arpa") { return true }
         if !h.contains(".") && !h.contains(":") { return true } // local DNS single-label name

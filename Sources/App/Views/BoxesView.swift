@@ -8,6 +8,7 @@ struct BoxesView: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var showingAddBox = false
+    @State private var editingBox: BoxEndpoint?
 
     var body: some View {
         NavigationStack {
@@ -37,6 +38,7 @@ struct BoxesView: View {
                                         Text("\(box.host):\(box.port)")
                                             .font(.subheadline)
                                             .foregroundStyle(.secondary)
+                                        onlineStateLabel(for: box)
                                     }
                                     Spacer()
                                     if box.id == model.selectedBox?.id {
@@ -44,6 +46,14 @@ struct BoxesView: View {
                                             .foregroundStyle(.tint)
                                     }
                                 }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    editingBox = box
+                                } label: {
+                                    Label("Bearbeiten", systemImage: "pencil")
+                                }
+                                .tint(.blue)
                             }
                         }
                         .onDelete { offsets in
@@ -53,6 +63,7 @@ struct BoxesView: View {
                             }
                         }
                     }
+                    .task { await model.refreshOnlineStates() }
                 }
             }
             .navigationTitle("MuPiBox Control")
@@ -67,6 +78,16 @@ struct BoxesView: View {
             .sheet(isPresented: $showingAddBox) {
                 AddBoxView(model: model)
             }
+            .sheet(item: $editingBox) { box in
+                AddBoxView(model: model, editing: box)
+            }
         }
+    }
+
+    private func onlineStateLabel(for box: BoxEndpoint) -> some View {
+        let online = model.onlineStates[box.id]
+        return Text(online == true ? "Online" : online == false ? "Offline" : "Wird geprüft …")
+            .font(.caption)
+            .foregroundStyle(online == true ? .green : online == false ? .red : .secondary)
     }
 }

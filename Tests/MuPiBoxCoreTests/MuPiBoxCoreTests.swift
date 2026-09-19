@@ -69,6 +69,27 @@ import Testing
     }
 }
 
+// `isLanHost` is also used directly (not just via `validate`) to re-check an already-resolved
+// numeric address in the App target's DNS-rebinding guard (`LanDNSGuard`), so it's covered here
+// as its own public contract, independent of the add-box validation flow.
+
+@Test func isLanHostAcceptsResolvedPrivateIPv4() throws {
+    #expect(LocalEndpointValidator.isLanHost("10.0.0.5"))
+    #expect(LocalEndpointValidator.isLanHost("172.16.0.1"))
+    #expect(LocalEndpointValidator.isLanHost("169.254.1.1"))
+}
+
+@Test func isLanHostRejectsResolvedPublicIPv4() throws {
+    #expect(!LocalEndpointValidator.isLanHost("8.8.8.8"))
+    #expect(!LocalEndpointValidator.isLanHost("203.0.113.5"))
+}
+
+@Test func isLanHostAcceptsIPv6ULAAndLinkLocal() throws {
+    #expect(LocalEndpointValidator.isLanHost("fd12:3456:789a::1"))
+    #expect(LocalEndpointValidator.isLanHost("fe80::1"))
+    #expect(LocalEndpointValidator.isLanHost("::1"))
+}
+
 // MARK: - PlaybackSourceSelector
 
 private func player(state: String, queueCount: Int) throws -> PlayerStatus {

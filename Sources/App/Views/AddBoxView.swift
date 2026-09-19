@@ -1,11 +1,25 @@
 import SwiftUI
+import MuPiBoxCore
 
+/// Add or edit a saved MuPiBox. Handles both in one view (rather than a near-duplicate
+/// EditBoxView) since the form, validation, and health-check flow are identical - only the
+/// title/action label and which AppModel method gets called differ.
 struct AddBoxView: View {
     @Bindable var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var name = "MuPiBox"
-    @State private var host = ""
-    @State private var port = "8090"
+    let editing: BoxEndpoint?
+
+    @State private var name: String
+    @State private var host: String
+    @State private var port: String
+
+    init(model: AppModel, editing: BoxEndpoint? = nil) {
+        self.model = model
+        self.editing = editing
+        _name = State(initialValue: editing?.name ?? "MuPiBox")
+        _host = State(initialValue: editing?.host ?? "")
+        _port = State(initialValue: editing.map { String($0.port) } ?? "8090")
+    }
 
     var body: some View {
         NavigationStack {
@@ -23,7 +37,7 @@ struct AddBoxView: View {
                         .font(.footnote)
                 }
             }
-            .navigationTitle("MuPiBox hinzufügen")
+            .navigationTitle(editing == nil ? "MuPiBox hinzufügen" : "MuPiBox bearbeiten")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }
@@ -31,7 +45,11 @@ struct AddBoxView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Speichern") {
                         Task {
-                            await model.addBox(name: name, host: host, port: Int(port) ?? 8090)
+                            if let editing {
+                                await model.updateBox(editing, name: name, host: host, port: Int(port) ?? 8090)
+                            } else {
+                                await model.addBox(name: name, host: host, port: Int(port) ?? 8090)
+                            }
                             if model.errorMessage == nil { dismiss() }
                         }
                     }

@@ -23,9 +23,9 @@ struct DashboardView: View {
                     ScrollView {
                         VStack(spacing: DesignTokens.sectionSpacing) {
                             connectionHeader
+                            statusCards
                             nowPlayingCard
                             transportCard
-                            statusCards
                             ttsCard
                         }
                         .padding(DesignTokens.pagePadding)

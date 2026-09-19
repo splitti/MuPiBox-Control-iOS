@@ -45,7 +45,15 @@ The dashboard follows the shared Android/iOS information hierarchy. Small platfo
 
 ### Platform services
 
-`BonjourDiscovery` uses Network.framework and stays outside `MuPiBoxCore` so Linux tests remain clean.
+- `BonjourDiscovery` uses Network.framework and stays outside `MuPiBoxCore` so Linux tests remain
+  clean. Currently unwired (not started anywhere) - reserved for when MuPiBox-NG actually
+  advertises `_mupibox._tcp.`.
+- `LanDNSGuard` resolves a box's host via POSIX `getaddrinfo`/`getnameinfo` and validates every
+  resolved address is itself LAN-shaped (via `LocalEndpointValidator.isLanHost`) before
+  `MuPiBoxAPIClient` connects to it - the same defense Android's OkHttp `Dns`-based `LanOnlyDns`
+  provides, needed here too since `LocalEndpointValidator` only validates the host string's shape
+  at add/edit time, not what a live DNS resolution actually returns. Lives in the App target (not
+  Core) for the same Linux-portability reason as `BonjourDiscovery`.
 
 ## Persistence
 

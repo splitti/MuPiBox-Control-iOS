@@ -6,7 +6,7 @@ M1 is complete when the iOS app reaches functional parity with the first Android
 
 - App launches on the supported iOS deployment target.
 - User can add a MuPiBox by hostname/private IP and port.
-- Multiple boxes can be saved and selected.
+- Multiple boxes can be saved, edited, and selected.
 - Selection survives app restart.
 - App clearly shows online/offline state.
 - Local player status can be read.
